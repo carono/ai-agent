@@ -6,24 +6,12 @@
 
 ## Стек
 
-PHP 8.2+, Yii2, MySQL (multi-DB), RabbitMQ, Bootstrap 5.
 
 ---
 
 ## Структура и документация кода
 
 - Документация проекта: `docs/` (начни с `docs/OVERVIEW.md` если он есть)
-- Базовые модели генерируются автоматически — не редактируй их вручную
-
----
-
-## Миграции БД
-
-```bash
-php yii migrate/create <name>    # создать миграцию
-php yii migrate --interactive=0  # применить
-php yii giix                     # обновить base-модели после миграции
-```
 
 ---
 
