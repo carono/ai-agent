@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Build dist/claude-code/ and dist/open-code/ from src/.
+"""Build dist/<platform>/ from src/.
 
-Converts JSON agent/tool definitions from src/ to platform-specific formats
-using format.py, and copies static files (rules, templates).
+For each platform (claude-code, opencode):
+  1. Converts src/agents/*.json and src/tools/*.json via format.py
+  2. Copies src/rules/ and src/templates/ into dist/<platform>/
 
 Usage:
-    python build.py
+    python build.py              # build all platforms
+    python build.py claude-code  # build only claude-code
+    python build.py opencode     # build only opencode
 """
 
-import json
+import argparse
 import os
 import shutil
 import subprocess
@@ -20,10 +23,37 @@ SRC = os.path.join(ROOT, "src")
 DIST = os.path.join(ROOT, "dist")
 FORMAT_SCRIPT = os.path.join(SCRIPT_DIR, "format.py")
 
-PLATFORMS = ["claude-code", "opencode"]
+ALL_PLATFORMS = ["claude-code", "opencode"]
 
 
-def run_format(input_path: str, platform: str, output_path: str) -> None:
+def clean_dist():
+    """Remove entire dist/ directory."""
+    if os.path.isdir(DIST):
+        shutil.rmtree(DIST)
+    os.makedirs(DIST, exist_ok=True)
+
+
+def copy_dir(src_dir: str, dst_dir: str) -> int:
+    """Copy all files from src_dir to dst_dir. Returns count."""
+    if not os.path.isdir(src_dir):
+        print(f"  SKIP: {src_dir} not found")
+        return 0
+
+    os.makedirs(dst_dir, exist_ok=True)
+    count = 0
+    for fname in sorted(os.listdir(src_dir)):
+        src_path = os.path.join(src_dir, fname)
+        if os.path.isfile(src_path):
+            dst_path = os.path.join(dst_dir, fname)
+            shutil.copy2(src_path, dst_path)
+            rel_in = os.path.relpath(src_path, ROOT)
+            rel_out = os.path.relpath(dst_path, ROOT)
+            print(f"  {rel_in} -> {rel_out}")
+            count += 1
+    return count
+
+
+def run_format(input_path: str, platform: str, output_path: str) -> bool:
     """Run format.py to convert a JSON file to a platform format."""
     ext = ".md" if platform == "claude-code" else ".json"
     style = "markdown" if platform == "claude-code" else "json"
@@ -37,38 +67,20 @@ def run_format(input_path: str, platform: str, output_path: str) -> None:
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         print(f"  ERROR: {result.stderr.strip()}", file=sys.stderr)
-        return
+        return False
 
     rel_in = os.path.relpath(input_path, ROOT)
     rel_out = os.path.relpath(output_path, ROOT)
     print(f"  {rel_in} -> {rel_out}")
-
-
-def copy_dir(src_dir: str, dst_dir: str) -> int:
-    """Copy all files from src_dir to dst_dir. Returns count."""
-    if not os.path.isdir(src_dir):
-        return 0
-
-    os.makedirs(dst_dir, exist_ok=True)
-    count = 0
-    for fname in sorted(os.listdir(src_dir)):
-        src_path = os.path.join(src_dir, fname)
-        if os.path.isfile(src_path):
-            dst_path = os.path.join(dst_dir, fname)
-            shutil.copy2(src_path, dst_path)
-            rel_in = os.path.relpath(src_path, ROOT)
-            rel_out = os.path.relpath(dst_path, ROOT)
-            print(f"  {rel_in} -> {rel_out} (copy)")
-            count += 1
-    return count
+    return True
 
 
 def build_platform(platform: str) -> int:
-    """Build all files for a single platform. Returns count."""
+    """Build dist/<platform>/ from src/. Returns file count."""
     base = os.path.join(DIST, platform)
     total = 0
 
-    # Convert agents
+    # Step 1: Convert agents and tools via format.py
     agents_src = os.path.join(SRC, "agents")
     agents_dst = os.path.join(base, "agents")
     if os.path.isdir(agents_src):
@@ -77,14 +89,13 @@ def build_platform(platform: str) -> int:
             if fname.endswith(".json"):
                 ext = "md" if platform == "claude-code" else "json"
                 out_name = fname.replace(".json", f".{ext}")
-                run_format(
+                if run_format(
                     os.path.join(agents_src, fname),
                     platform,
                     os.path.join(agents_dst, out_name),
-                )
-                total += 1
+                ):
+                    total += 1
 
-    # Convert tools
     tools_src = os.path.join(SRC, "tools")
     tools_dst = os.path.join(base, "tools")
     if os.path.isdir(tools_src):
@@ -93,31 +104,39 @@ def build_platform(platform: str) -> int:
             if fname.endswith(".json"):
                 ext = "md" if platform == "claude-code" else "json"
                 out_name = fname.replace(".json", f".{ext}")
-                run_format(
+                if run_format(
                     os.path.join(tools_src, fname),
                     platform,
                     os.path.join(tools_dst, out_name),
-                )
-                total += 1
+                ):
+                    total += 1
 
-    # Copy static: rules
-    rules_src = os.path.join(DIST, "rules")
-    rules_dst = os.path.join(base, "rules")
-    total += copy_dir(rules_src, rules_dst)
-
-    # Copy static: templates
-    templates_src = os.path.join(DIST, "templates")
-    templates_dst = os.path.join(base, "templates")
-    total += copy_dir(templates_src, templates_dst)
+    # Step 2: Copy rules and templates
+    total += copy_dir(os.path.join(SRC, "rules"), os.path.join(base, "rules"))
+    total += copy_dir(os.path.join(SRC, "templates"), os.path.join(base, "templates"))
 
     return total
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "platform",
+        nargs="?",
+        choices=ALL_PLATFORMS,
+        help="Build only this platform (default: all)",
+    )
+    args = parser.parse_args()
+
+    platforms = [args.platform] if args.platform else ALL_PLATFORMS
+
     print("Building dist/ from src/")
+
+    clean_dist()
+
     total = 0
 
-    for platform in PLATFORMS:
+    for platform in platforms:
         print(f"\n[{platform}]")
         total += build_platform(platform)
 
