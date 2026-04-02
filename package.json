@@ -1,0 +1,15 @@
+{
+  "name": "carono-workflow",
+  "version": "0.1.0",
+  "description": "Universal agent toolkit for development automation",
+  "scripts": {
+    "build": "python3 src/scripts/build.py",
+    "convert": "python3 src/scripts/convert.py dist/agents src/agents",
+    "format": "python3 src/scripts/format.py"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/carono/workflow.git"
+  },
+  "license": "MIT"
+}
