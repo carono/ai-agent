@@ -1,1 +1,1 @@
-npx degit carono/workflow .claude/agents/carono
+npx degit carono/workflow/dist .claude/agents/carono

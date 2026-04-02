@@ -1,3 +1,4 @@
 .idea
 develop
-logs/
+src/logs/
+.claude/settings.local.json

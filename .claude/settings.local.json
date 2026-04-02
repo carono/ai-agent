@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/agent_logger.py"
+            "command": "python3 src/scripts/agent_logger.py"
           }
         ]
       }
