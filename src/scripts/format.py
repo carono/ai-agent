@@ -116,7 +116,7 @@ def main():
 
     agent = load_agent(args.input)
     fmt = args.format
-    style = args.style or ("markdown" if fmt == "claude-code" else "json")
+    style = args.style or "markdown"
 
     if fmt == "claude-code":
         output = to_claude_code_md(agent) if style == "markdown" else json.dumps(to_claude_code_json(agent), indent=2, ensure_ascii=False)

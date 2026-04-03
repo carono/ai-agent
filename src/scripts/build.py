@@ -55,8 +55,8 @@ def copy_dir(src_dir: str, dst_dir: str) -> int:
 
 def run_format(input_path: str, platform: str, output_path: str) -> bool:
     """Run format.py to convert a JSON file to a platform format."""
-    ext = ".md" if platform == "claude-code" else ".json"
-    style = "markdown" if platform == "claude-code" else "json"
+    ext = ".md"
+    style = "markdown"
 
     cmd = [
         sys.executable, FORMAT_SCRIPT,
@@ -87,8 +87,7 @@ def build_platform(platform: str) -> int:
         os.makedirs(agents_dst, exist_ok=True)
         for fname in sorted(os.listdir(agents_src)):
             if fname.endswith(".json"):
-                ext = "md" if platform == "claude-code" else "json"
-                out_name = fname.replace(".json", f".{ext}")
+                out_name = fname.replace(".json", ".md")
                 if run_format(
                     os.path.join(agents_src, fname),
                     platform,
@@ -102,8 +101,7 @@ def build_platform(platform: str) -> int:
         os.makedirs(tools_dst, exist_ok=True)
         for fname in sorted(os.listdir(tools_src)):
             if fname.endswith(".json"):
-                ext = "md" if platform == "claude-code" else "json"
-                out_name = fname.replace(".json", f".{ext}")
+                out_name = fname.replace(".json", ".md")
                 if run_format(
                     os.path.join(tools_src, fname),
                     platform,
