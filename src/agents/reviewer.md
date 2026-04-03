@@ -24,6 +24,10 @@ ls -d workflow/*/ 2>/dev/null
 
 {{RULES_SECURITY}}
 
+## Шаг 0.6 — Правило одной задачи
+
+{{RULES_SINGLE_TASK}}
+
 ## Шаг 1 — Изучи контекст проекта
 
 Прочитай:
