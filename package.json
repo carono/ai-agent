@@ -6,7 +6,10 @@
     "build": "npm run build:claude-code && npm run build:opencode",
     "build:claude-code": "python3 src/scripts/build.py claude-code",
     "build:opencode": "python3 src/scripts/build.py opencode",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "watch": "python3 src/scripts/watch.py",
+    "watch:claude-code": "python3 src/scripts/watch.py claude-code",
+    "watch:opencode": "python3 src/scripts/watch.py opencode"
   },
   "repository": {
     "type": "git",
