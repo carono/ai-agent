@@ -2,7 +2,7 @@
 """Build dist/<platform>/ from src/.
 
 For each platform (claude-code, opencode):
-  1. Converts src/agents/*.json and src/tools/*.json via format.py
+  1. Converts src/agents/*.md and src/tools/*.md via format.py
   2. Copies src/rules/ and src/templates/ into dist/<platform>/
 
 Usage:
@@ -54,7 +54,7 @@ def copy_dir(src_dir: str, dst_dir: str) -> int:
 
 
 def run_format(input_path: str, platform: str, output_path: str) -> bool:
-    """Run format.py to convert a JSON file to a platform format."""
+    """Run format.py to convert a Markdown file to a platform format."""
     ext = ".md"
     style = "markdown"
 
@@ -86,12 +86,11 @@ def build_platform(platform: str) -> int:
     if os.path.isdir(agents_src):
         os.makedirs(agents_dst, exist_ok=True)
         for fname in sorted(os.listdir(agents_src)):
-            if fname.endswith(".json"):
-                out_name = fname.replace(".json", ".md")
+            if fname.endswith(".md"):
                 if run_format(
                     os.path.join(agents_src, fname),
                     platform,
-                    os.path.join(agents_dst, out_name),
+                    os.path.join(agents_dst, fname),
                 ):
                     total += 1
 
@@ -100,12 +99,11 @@ def build_platform(platform: str) -> int:
     if os.path.isdir(tools_src):
         os.makedirs(tools_dst, exist_ok=True)
         for fname in sorted(os.listdir(tools_src)):
-            if fname.endswith(".json"):
-                out_name = fname.replace(".json", ".md")
+            if fname.endswith(".md"):
                 if run_format(
                     os.path.join(tools_src, fname),
                     platform,
-                    os.path.join(tools_dst, out_name),
+                    os.path.join(tools_dst, fname),
                 ):
                     total += 1
 

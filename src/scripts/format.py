@@ -1,38 +1,60 @@
 #!/usr/bin/env python3
-"""Convert agent JSON to Claude Code or OpenCode format.
+"""Convert agent Markdown (YAML frontmatter) to Claude Code or OpenCode format.
 
-Reads a JSON file with agent definition (name, description, tools, instructions)
-and outputs a valid configuration for the specified AI tool.
+Reads a Markdown file with YAML frontmatter (name, description, tools)
+and body (instructions), then outputs a valid configuration for the
+specified AI tool.
 
 Usage:
-    python format.py <input.json> <claude-code|opencode> [--output <path>]
+    python format.py <input.md> <claude-code|opencode> [--output <path>]
 
 Examples:
-    python format.py src/agents/worker.json claude-code
-    python format.py src/agents/worker.json opencode
-    python format.py src/agents/worker.json claude-code --output .claude/agents/worker.md
-    python format.py src/agents/worker.json opencode --output opencode-agents.json
+    python format.py src/agents/worker.md claude-code
+    python format.py src/agents/worker.md opencode
+    python format.py src/agents/worker.md claude-code --output .claude/agents/worker.md
+    python format.py src/agents/worker.md opencode --output opencode-agents.json
 """
 
 import argparse
 import json
 import os
+import re
 import sys
 
 
 def load_agent(path: str) -> dict:
-    """Load and validate agent JSON file."""
+    """Load agent from Markdown file with YAML frontmatter."""
     with open(path, encoding="utf-8") as f:
-        data = json.load(f)
+        content = f.read()
+
+    # Parse YAML frontmatter
+    match = re.match(r"^---\n(.*?)\n---\n(.*)", content, re.DOTALL)
+    if not match:
+        raise ValueError(f"No YAML frontmatter found in {path}")
+
+    frontmatter_text = match.group(1)
+    instructions = match.group(2).strip()
+
+    # Simple YAML parser for flat key: value pairs
+    frontmatter = {}
+    for line in frontmatter_text.splitlines():
+        m = re.match(r"^(\w+):\s*(.*)", line)
+        if m:
+            key, value = m.group(1), m.group(2).strip()
+            if key == "tools":
+                frontmatter[key] = [t.strip() for t in value.split(",") if t.strip()] if value else []
+            else:
+                frontmatter[key] = value
 
     for key in ("name", "description", "instructions"):
-        if key not in data:
+        if key not in frontmatter and key != "instructions":
             raise ValueError(f"Missing required field: {key}")
 
-    if "tools" not in data:
-        data["tools"] = []
+    frontmatter["instructions"] = instructions
+    if "tools" not in frontmatter:
+        frontmatter["tools"] = []
 
-    return data
+    return frontmatter
 
 
 def to_claude_code_md(agent: dict) -> str:
@@ -108,7 +130,7 @@ def determine_output_path(args, agent: dict, fmt: str) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("input", help="Input agent JSON file")
+    parser.add_argument("input", help="Input agent Markdown file")
     parser.add_argument("format", choices=["claude-code", "opencode"], help="Target format")
     parser.add_argument("--output", "-o", help="Output file or directory (default: stdout)")
     parser.add_argument("--style", choices=["markdown", "json"], help="Output style (default: markdown for claude-code, json for opencode)")
