@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "description": "Universal agent toolkit for development automation",
   "scripts": {
-    "build": "python3 src/scripts/build.py"
+    "build": "npm run build:claude-code && npm run build:opencode",
+    "build:claude-code": "python3 src/scripts/build.py claude-code",
+    "build:opencode": "python3 src/scripts/build.py opencode",
+    "clean": "rm -rf dist"
   },
   "repository": {
     "type": "git",

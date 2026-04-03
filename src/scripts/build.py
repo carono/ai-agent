@@ -26,11 +26,11 @@ FORMAT_SCRIPT = os.path.join(SCRIPT_DIR, "format.py")
 ALL_PLATFORMS = ["claude-code", "opencode"]
 
 
-def clean_dist():
-    """Remove entire dist/ directory."""
-    if os.path.isdir(DIST):
-        shutil.rmtree(DIST)
-    os.makedirs(DIST, exist_ok=True)
+def clean_platform_dir(platform: str):
+    """Remove dist/<platform>/ if it exists."""
+    path = os.path.join(DIST, platform)
+    if os.path.isdir(path):
+        shutil.rmtree(path)
 
 
 def copy_dir(src_dir: str, dst_dir: str) -> int:
@@ -132,12 +132,11 @@ def main() -> None:
 
     print("Building dist/ from src/")
 
-    clean_dist()
-
     total = 0
 
     for platform in platforms:
         print(f"\n[{platform}]")
+        clean_platform_dir(platform)
         total += build_platform(platform)
 
     print(f"\nDone. {total} file(s) processed.")
