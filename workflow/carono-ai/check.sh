@@ -91,45 +91,37 @@ def api_get(url):
             data = json.loads(resp.read())
             log(f'Ответ: {resp.status}, содержимое: {len(json.dumps(data))} символов')
             return data
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8') if e.fp else ''
+        log(f'HTTP Error {e.code}: {e.reason}')
+        log(f'Тело ошибки: {error_body}')
+        raise Exception(f'HTTP {e.code}: {e.reason} — неверный токен API или нет доступа')
     except Exception as e:
         log(f'Ошибка запроса: {e}')
-        return None
+        raise
 
 # Находим проект WORKFLOW
 log('Ищем проект WORKFLOW...')
 projects = api_get('https://yougile.com/api-v2/projects')
-if not projects:
-    print('[]')
-    sys.exit(0)
 
 log(f'Найдено проектов: {projects.get(\"paging\", {}).get(\"count\", 0)}')
 workflow_proj = next((p for p in projects['content'] if p['title'] == 'WORKFLOW'), None)
 if not workflow_proj:
-    log('Проект WORKFLOW не найден')
-    print('[]')
-    sys.exit(0)
+    raise Exception('Проект WORKFLOW не найден')
 log(f'Проект WORKFLOW найден, id: {workflow_proj[\"id\"]}')
 
 # Находим доску «Разработка»
 log('Ищем доску Разработка...')
 boards = api_get(f'https://yougile.com/api-v2/boards?projectId={workflow_proj[\"id\"]}')
-if not boards:
-    print('[]')
-    sys.exit(0)
 log(f'Найдено досок: {boards.get(\"paging\", {}).get(\"count\", 0)}')
 dev_board = next((b for b in boards['content'] if b['title'] == 'Разработка'), None)
 if not dev_board:
-    log('Доска Разработка не найдена')
-    print('[]')
-    sys.exit(0)
+    raise Exception('Доска Разработка не найдена')
 log(f'Доска Разработка найдена, id: {dev_board[\"id\"]}')
 
 # Находим колонки
 log('Получаем колонки...')
 columns = api_get(f'https://yougile.com/api-v2/columns?boardId={dev_board[\"id\"]}')
-if not columns:
-    print('[]')
-    sys.exit(0)
 col_map = {c['title']: c['id'] for c in columns['content']}
 log(f'Найдено колонок: {len(col_map)} -> {list(col_map.keys())}')
 
@@ -138,14 +130,11 @@ all_tasks = []
 for col_name, col_id in col_map.items():
     log(f'Получаем задачи из колонки \"{col_name}\" ({col_id})...')
     data = api_get(f'https://yougile.com/api-v2/task-list?columnId={col_id}&limit=1000')
-    if data:
-        count = len(data.get('content', []))
-        log(f'  Задач в колонке: {count}')
-        for task in data['content']:
-            task['_column'] = col_name
-            all_tasks.append(task)
-    else:
-        log(f'  Ошибка получения задач из колонки \"{col_name}\"')
+    count = len(data.get('content', []))
+    log(f'  Задач в колонке: {count}')
+    for task in data['content']:
+        task['_column'] = col_name
+        all_tasks.append(task)
 
 log(f'Всего задач собрано: {len(all_tasks)}')
 print(json.dumps(all_tasks, ensure_ascii=False))
@@ -158,6 +147,24 @@ if [ "$VERBOSE" = true ]; then
 fi
 
 verbose_log "Получено задач (JSON длина): ${#ISSUES_JSON}"
+
+# Проверяем что получили валидный JSON массив задач
+if [ -z "$ISSUES_JSON" ]; then
+    echo "Ошибка: пустой ответ от YouGile API" >&2
+    exit 1
+fi
+
+# Проверяем что это массив (начинается с [), а не текст ошибки
+if [ "${ISSUES_JSON:0:1}" != "[" ]; then
+    echo "Ошибка: неверный ответ от YouGile API:" >&2
+    echo "$ISSUES_JSON" >&2
+    exit 1
+fi
+
+if [ "$ISSUES_JSON" = "[]" ]; then
+    echo "Ошибка: не удалось получить задачи из YouGile API. Проверь токен и доступ к API." >&2
+    exit 1
+fi
 
 # Сохраняем JSON во временный файл — прямая интерполяция '''$ISSUES_JSON'''
 # ломается если в данных есть одинарные кавычки (названия задач и т.п.)
@@ -232,11 +239,11 @@ print(count)
 
 verbose_log "COUNT_WORKER: $COUNT_WORKER"
 
-# Reviewer: колонка «на ревью» может не существовать — проверяем
+# Reviewer: колонка «На проверке»
 HAS_REVIEW_COLUMN=$(python3 -c "
 import json
 issues = json.load(open('$ISSUES_TMP'))
-print('yes' if any(i.get('_column') == 'на ревью' for i in issues) else 'no')
+print('yes' if any(i.get('_column') == 'На проверке' for i in issues) else 'no')
 ")
 
 verbose_log "HAS_REVIEW_COLUMN: $HAS_REVIEW_COLUMN"
@@ -244,17 +251,18 @@ verbose_log "HAS_REVIEW_COLUMN: $HAS_REVIEW_COLUMN"
 if [ "$HAS_REVIEW_COLUMN" = "yes" ]; then
     verbose_log "Подсчёт задач для reviewer..."
     COUNT_REVIEWER=$(python3 -c "
-import json, sys
+import json, sys, os
 issues = json.load(open('$ISSUES_TMP'))
 ai_user = '$AI_USER_ID'
 verbose = $( [ "$VERBOSE" = true ] && echo "True" || echo "False" )
+# Рецензирование: задачи в колонке 'На проверке', назначенные на AI
 count = sum(
     1 for i in issues
-    if i.get('_column') == 'на ревью' and
+    if i.get('_column') == 'На проверке' and
     ai_user in i.get('assigned', [])
 )
 if verbose:
-    matching = [i for i in issues if i.get('_column') == 'на ревью' and ai_user in i.get('assigned', [])]
+    matching = [i for i in issues if i.get('_column') == 'На проверке' and ai_user in i.get('assigned', [])]
     for t in matching:
         print(f'  [reviewer] {t.get(\"idTaskProject\", \"?\")} - {t.get(\"title\", \"\")}', file=sys.stderr)
 print(count)
@@ -262,7 +270,7 @@ print(count)
     verbose_log "COUNT_REVIEWER: $COUNT_REVIEWER"
 else
     COUNT_REVIEWER=0
-    verbose_log "COUNT_REVIEWER: 0 (колонка 'на ревью' отсутствует)"
+    verbose_log "COUNT_REVIEWER: 0 (колонка 'На проверке' отсутствует)"
 fi
 
 # ─── Блок 3: Определение NEEDED ────────────────────────────────────────────────
