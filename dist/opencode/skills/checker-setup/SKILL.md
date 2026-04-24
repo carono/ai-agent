@@ -216,7 +216,9 @@ for t in tasks:
     tid = str(t["id"])
     comments = subprocess.check_output(["$TRACKER", "list-comments", t["id"]])
     last = (json.loads(comments) or [{}])[-1].get("id", "")
-    if tid not in issues or issues[tid].get("updated_at") != last:
+    saved = issues.get(tid, {}).get("updated_at", "")
+    # normalize — state may hold str or int, API returns int
+    if str(saved) != str(last):
         new += 1
 print(new)
 PY
