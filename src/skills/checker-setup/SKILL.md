@@ -1,0 +1,264 @@
+---
+name: checker-setup
+description: Генерирует workflow/{bot-name}/check.sh — скрипт проверки состояния трекера и запуска агентов. Запускай после tracker-setup или когда изменились колонки, агенты или их зоны ответственности в bot.local.md.
+---
+
+Ты скилл генерации скрипта проверки и запуска агентов. Твоя задача — прочитать конфигурацию бота, понять какие агенты есть и в каких колонках они ищут задачи, и сгенерировать `workflow/{bot-name}/check.sh`. Скрипт опирается на CLI-контракт `workflow/{bot-name}/scripts/tracker` (унифицированный интерфейс к трекеру).
+
+## Поведение готового скрипта
+
+**Без аргументов** — выводит таблицу состояния по всем агентам:
+```
+AGENT       TASKS  NEEDED
+discussion  3      yes
+worker      0      no
+reviewer    1      yes
+```
+
+**`--run <agent>`** — запускает конкретного агента через `claude --agent`.
+
+**`--run all`** — запускает параллельно всех агентов у которых `NEEDED=yes`. Каждый агент работает в отдельном процессе. Поскольку разные агенты обрабатывают задачи в своих колонках, конфликтов на одну задачу не возникает.
+
+После `--run` скрипт ждёт завершения всех запущенных и печатает итог: кто завершился успешно, кто с ошибкой.
+
+## Шаг 0 — Определи бота
+
+```bash
+ls -d workflow/*/ 2>/dev/null
+```
+
+- **Одна папка** — её имя и есть `{bot-name}`.
+- **Несколько папок** — спроси: «Найдено несколько ботов: <перечисли>. Для какого генерируем check.sh?»
+- **Ни одной** — останови работу: «Сначала запусти агент `configure`».
+
+## Шаг 0.5 — Правила безопасности
+
+{{RULES_SECURITY}}
+
+## Шаг 1 — Проверь что `scripts/tracker` настроен
+
+`check.sh` дёргает CLI-скрипт трекера для получения задач. Без него генерировать нечего.
+
+```bash
+test -x workflow/{bot-name}/scripts/tracker && echo "tracker: OK" || echo "tracker: MISSING"
+```
+
+- **Нет скрипта** — останови работу: «Сначала запусти скилл `carono-wf:tracker-setup` — он создаст `workflow/{bot-name}/scripts/tracker`, без него `check.sh` не работает».
+- **Скрипт есть** — сделай smoke-test:
+  ```bash
+  ./workflow/{bot-name}/scripts/tracker whoami >/dev/null
+  ```
+  Если падает — сообщи ошибку и предложи перезапустить `tracker-setup`.
+
+## Шаг 2 — Изучи конфигурацию бота
+
+Прочитай:
+
+1. **`workflow/{bot-name}/bot.local.md`** — основной источник. Там в секциях `### Агент <имя>` описано:
+   - какую колонку агент обрабатывает,
+   - какой фильтр по исполнителю (на бота / без исполнителя / комбинация).
+2. **`workflow/{bot-name}/WORKFLOW.md`** — для перекрёстной проверки (жизненный цикл задачи, список колонок, стейт-файлы).
+
+Для каждого агента зафиксируй:
+- **Имя** — как в секции `### Агент <имя>` и как в `/agents` (для запуска через `claude --agent <имя>`).
+- **Колонка** — человекочитаемое название (как в `list-columns`).
+- **Фильтр** — один из вариантов:
+  - `--assignee me` — только задачи на боте
+  - `--assignee none` — только без исполнителя
+  - `both` — и свои, и без исполнителя (две команды и объединение)
+  - `all` — все задачи в колонке
+- **Стейт-файл** — если агент использует стейт для дедупликации (например discussion хранит `updated_at` последнего прочитанного комментария), зафиксируй путь и структуру.
+
+Если `bot.local.md` отсутствует или пуст — останови работу: «Запусти `configure` чтобы заполнить зоны ответственности агентов».
+
+## Шаг 3 — Проверь существующий check.sh
+
+**Если `workflow/{bot-name}/check.sh` есть:**
+- Прочитай его.
+- Сравни набор агентов, колонок и фильтров с тем что нашёл на Шаге 2.
+- Если всё совпадает — сообщи «check.sh актуален» и останови работу.
+- Если есть расхождения — перегенерируй целиком (скрипт небольшой, частичный Edit хрупок).
+
+**Если скрипта нет** — генерируй с нуля.
+
+## Шаг 4 — Сгенерируй check.sh
+
+Скрипт состоит из блоков в порядке ниже. Получение задач — **только через `./scripts/tracker`**, никаких прямых curl/API — это базовая гарантия унификации.
+
+### Шапка
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+BOT_DIR="workflow/{bot-name}"
+TRACKER="$BOT_DIR/scripts/tracker"
+
+if [[ ! -x "$TRACKER" ]]; then
+  echo "ERROR: $TRACKER not found or not executable. Run the carono-wf:tracker-setup skill first." >&2
+  exit 2
+fi
+```
+
+### Получение задач для каждого агента
+
+Для агента с фильтром **`--assignee me`**:
+```bash
+TASKS_<АГЕНТ>=$("$TRACKER" list-tasks --column "<колонка>" --assignee me)
+```
+
+Для агента с фильтром **`--assignee none`**:
+```bash
+TASKS_<АГЕНТ>=$("$TRACKER" list-tasks --column "<колонка>" --assignee none)
+```
+
+Для агента с фильтром **`both`** (на боте ИЛИ без исполнителя) — два запроса + объединение по `id`:
+```bash
+TASKS_<АГЕНТ>=$(
+  {
+    "$TRACKER" list-tasks --column "<колонка>" --assignee me
+    "$TRACKER" list-tasks --column "<колонка>" --assignee none
+  } | jq -s 'add | unique_by(.id)'
+)
+```
+
+Для агента с фильтром **`all`** (все задачи колонки):
+```bash
+TASKS_<АГЕНТ>=$("$TRACKER" list-tasks --column "<колонка>")
+```
+
+### Подсчёт задач
+
+Для агента **без стейт-файла**:
+```bash
+COUNT_<АГЕНТ>=$(echo "$TASKS_<АГЕНТ>" | jq 'length')
+NEEDED_<АГЕНТ>="no"
+[[ "$COUNT_<АГЕНТ>" -gt 0 ]] && NEEDED_<АГЕНТ>="yes"
+```
+
+Для агента **со стейт-файлом** (пример: discussion хранит `updated_at` последнего сообщения в чате задачи):
+```bash
+STATE_<АГЕНТ>="$BOT_DIR/<имя-стейта>.json"
+
+COUNT_<АГЕНТ>_TOTAL=$(echo "$TASKS_<АГЕНТ>" | jq 'length')
+
+COUNT_<АГЕНТ>_NEW=$(python3 - <<PY
+import json, os, subprocess
+tasks = json.loads('''$TASKS_<АГЕНТ>''')
+state = {}
+p = "$STATE_<АГЕНТ>"
+if os.path.exists(p):
+    try: state = json.load(open(p))
+    except Exception: pass
+issues = state.get("issues", {})
+new = 0
+for t in tasks:
+    tid = str(t["id"])
+    comments = subprocess.check_output(["$TRACKER", "list-comments", t["id"]])
+    last = (json.loads(comments) or [{}])[-1].get("id", "")
+    if tid not in issues or issues[tid].get("updated_at") != last:
+        new += 1
+print(new)
+PY
+)
+
+NEEDED_<АГЕНТ>="no"
+[[ "$COUNT_<АГЕНТ>_NEW" -gt 0 ]] && NEEDED_<АГЕНТ>="yes"
+```
+
+**Примечание.** В стейтовых агентах структура `state.json` диктуется самим агентом (смотри `workflow/{bot-name}/WORKFLOW.md`, раздел про стейт-файл). В примере выше — формат для discussion, где ключ в `issues` — ID задачи, значение `updated_at` — ID последнего сообщения. Если в твоём проекте формат другой — адаптируй.
+
+### Режим status (по умолчанию)
+
+```bash
+MODE="${1:-status}"
+
+if [[ "$MODE" == "status" ]]; then
+  printf "%-15s %-12s %s\n" "AGENT" "TASKS" "NEEDED"
+  printf "%-15s %-12s %s\n" "<агент1>" "$COUNT_<АГЕНТ1>" "$NEEDED_<АГЕНТ1>"
+  # ... для каждого агента
+  exit 0
+fi
+```
+
+Для стейтовых агентов в колонке `TASKS` выводи `NEW (из TOTAL)`, например `2 (из 5)`:
+```bash
+printf "%-15s %-12s %s\n" "discussion" "$COUNT_discussion_NEW (из $COUNT_discussion_TOTAL)" "$NEEDED_discussion"
+```
+
+### Режим `--run`
+
+```bash
+if [[ "$MODE" == "--run" ]]; then
+  TARGET="${2:-}"
+  if [[ -z "$TARGET" ]]; then
+    echo "Использование: $0 --run <agent|all>" >&2
+    exit 1
+  fi
+
+  mkdir -p "$BOT_DIR/logs"
+
+  run_agent() {
+    local agent="$1"
+    echo "[start] $agent"
+    if claude -p "Выполни свои задачи" --agent "$agent" \
+         > "$BOT_DIR/logs/${agent}-$(date +%s).log" 2>&1; then
+      echo "[ok]    $agent"
+    else
+      echo "[fail]  $agent (см. $BOT_DIR/logs/)"
+    fi
+  }
+
+  if [[ "$TARGET" == "all" ]]; then
+    PIDS=()
+    for pair in \
+      "<агент1>:$NEEDED_<АГЕНТ1>" \
+      "<агент2>:$NEEDED_<АГЕНТ2>"; do
+      agent="${pair%%:*}"
+      needed="${pair##*:}"
+      if [[ "$needed" == "yes" ]]; then
+        run_agent "$agent" &
+        PIDS+=($!)
+      fi
+    done
+    for pid in "${PIDS[@]}"; do wait "$pid"; done
+  else
+    run_agent "$TARGET"
+  fi
+
+  exit 0
+fi
+
+echo "Использование: $0 [--run <agent|all>]" >&2
+exit 1
+```
+
+**Имена агентов в `claude --agent`.** Если плагин уже поставлен, имя — с префиксом плагина (например `carono-wf:discussion`). Если агенты лежат локально в `.claude/agents/` — без префикса (просто `discussion`). Определи способ установки по наличию `.claude-plugin/` или `.claude/agents/` в проекте и используй соответствующий формат.
+
+## Шаг 5 — Права и синтаксис
+
+```bash
+chmod +x workflow/{bot-name}/check.sh
+bash -n workflow/{bot-name}/check.sh
+```
+
+Синтаксическая ошибка — исправь и повтори.
+
+## Шаг 6 — Dry-run
+
+Запусти `./workflow/{bot-name}/check.sh` без аргументов и покажи пользователю реальный вывод — таблицу состояния. Если видишь ошибку (например `list-tasks: column not found`) — значит в генерации перепутались названия колонок, чини и повторяй до чистого запуска.
+
+## Шаг 7 — Итог
+
+Сообщи пользователю:
+- Какие агенты в скрипте и с какими колонками/фильтрами
+- Показанный вывод `./check.sh` (таблицу)
+- Напомни команды: `./check.sh`, `./check.sh --run <agent>`, `./check.sh --run all`
+
+## Правила
+
+- **Только CLI.** Никаких прямых HTTP-запросов в `check.sh`, только `./scripts/tracker <cmd>`. Это инвариант.
+- **Никаких креденшиалов в скрипте.** Токен живёт только в `.env` трекера, `check.sh` его не читает и не передаёт.
+- **Перегенерация, а не правка.** Если обнаружены расхождения — пиши целиком через Write, частичный Edit на bash хрупок.
+- **Не создавай `logs/` заранее** — скрипт создаёт её сам при `--run`.
+- **Stateful-агенты.** Если агент использует стейт — уточни у пользователя или прочитай в `WORKFLOW.md` точный формат, не угадывай. В случае сомнений сделай без стейта (`COUNT` = всем задачам в колонке) и поставь `*(TODO: интегрировать стейт)*` комментарием.

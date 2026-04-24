@@ -10,8 +10,10 @@
 
 ## Что внутри
 
-- **Агенты** (`agents/`) — subagent'ы: `configure`, `discussion`, `worker`, `reviewer`, а также сервисные `checker`, `doc`, `tracker`
-- **Скиллы** (`skills/`) — `tracker-setup`: генерирует CLI-скрипт `workflow/{bot-name}/scripts/tracker` для работы с трекером
+- **Агенты** (`agents/`) — subagent'ы: `configure`, `discussion`, `worker`, `reviewer`, а также сервисные `doc`, `tracker`
+- **Скиллы** (`skills/`):
+  - `tracker-setup` — генерирует CLI-скрипт `workflow/{bot-name}/scripts/tracker` для работы с трекером
+  - `checker-setup` — генерирует `workflow/{bot-name}/check.sh` для проверки состояния задач и запуска агентов
 
 ## Установка — Claude Code
 
