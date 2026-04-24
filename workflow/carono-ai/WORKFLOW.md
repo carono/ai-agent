@@ -9,29 +9,24 @@
 **Сервис:** YouGile
 **Инстанс:** https://ru.yougile.com
 **Проект:** WORKFLOW
-**Доска:** разработка
+**Доска:** Разработка
 
-### Чтение конфигурации
+### Интеграция
 
-API-ключ YouGile хранится в переменной окружения `YOUGILE_API_KEY` в файле `.env` рядом с этим документом (`workflow/carono-ai/.env`). Файл `.env` добавлен в `.gitignore`.
-
-Все запросы к API — прямые HTTP-вызовы (curl или любой HTTP-клиент). MCP не используется.
-
-### Базовый URL
+Все операции с задачами (чтение, создание, комментарии, смена статусов, назначения) выполняются **строго через CLI-скрипт**:
 
 ```
-https://yougile.com/api-v2
+workflow/carono-ai/scripts/tracker <команда> [аргументы]
 ```
 
-### Авторизация
+Скрипт читает креденшиалы из `workflow/carono-ai/.env`. Прямые HTTP-запросы к YouGile API из агентов **запрещены** — если чего-то не хватает в текущем наборе команд, доработай скрипт (или повторно запусти скилл `carono-wf:tracker-setup`).
 
-Каждый запрос должен содержать заголовок:
-
-```
-Authorization: Bearer <YOUGILE_API_KEY>
-Content-Type: application/json
-Accept: application/json
-```
+Вывод команд — JSON в stdout; ошибки — в stderr; коды возврата:
+- `0` — успех
+- `1` — общая ошибка (неизвестная команда, неверный аргумент)
+- `2` — проблема с конфигурацией / `.env`
+- `3` — ресурс не найден (задача/колонка/пользователь)
+- `4` — сетевая или API-ошибка
 
 ---
 
@@ -59,129 +54,88 @@ Accept: application/json
 
 ## Операции с задачами
 
-Все операции выполняются прямыми HTTP-запросами к YouGile REST API v2.
+Все команды выполняются из корня репозитория. Вывод — JSON, ошибки — в stderr.
 
-### Найти задачи в нужной колонке
+### Проверить себя (валидность токена)
 
 ```
-GET https://yougile.com/api-v2/task-list?columnId=<column_id>&limit=20&offset=0
+./workflow/carono-ai/scripts/tracker whoami
 ```
 
-- `columnId` — ID колонки (предварительно узнать через GET /columns?boardId=<board_id>&title=<название колонки>)
-- `limit` — макс. число результатов (1–1000)
-- `offset` — смещение для пагинации
-- `includeDeleted=true` — включить удалённые задачи
-- `reversed_order=true` — можно использовать GET /tasks?columnId=... для обратного порядка
+### Список колонок
 
-Ответ содержит `{paging: {offset, limit, next}, content: [...]}` — массив задач.
+```
+./workflow/carono-ai/scripts/tracker list-columns
+```
+
+### Найти задачи в колонке
+
+```
+./workflow/carono-ai/scripts/tracker list-tasks --column "Обсуждение"
+./workflow/carono-ai/scripts/tracker list-tasks --column "Обсуждение" --assignee me
+./workflow/carono-ai/scripts/tracker list-tasks --column "Разработка" --assignee none
+./workflow/carono-ai/scripts/tracker list-tasks --column "На проверке" --limit 100
+```
+
+Спец-значения `--assignee`: `me` — текущий пользователь (токен), `none` — без исполнителя, логин/email — конкретный пользователь.
 
 ### Прочитать задачу
 
 ```
-GET https://yougile.com/api-v2/tasks/<task_id>
+./workflow/carono-ai/scripts/tracker get-task <id>
 ```
 
-Возвращает полную информацию: title, description, columnId, assigned, stickers, checklists, archived, completed, deleted и т.д.
+Возвращает `{id, number, title, description, column, assignees, url, created_at, updated_at}`.
+
+### Прочитать переписку задачи
+
+```
+./workflow/carono-ai/scripts/tracker list-comments <id>
+./workflow/carono-ai/scripts/tracker list-comments <id> --since <last-comment-id>
+```
+
+### Написать комментарий
+
+```
+./workflow/carono-ai/scripts/tracker comment <id> "короткий текст"
+./workflow/carono-ai/scripts/tracker comment <id> --file /tmp/comment.md
+```
+
+Для многострочных / с markdown — используй `--file`, надёжнее чем экранирование в shell.
+
+### Сменить статус (перенести в колонку)
+
+```
+./workflow/carono-ai/scripts/tracker move-task <id> --column "Разработка"
+```
+
+**Важно:** при переносе задачи в «Разработку», если на задаче ещё нет исполнителя — бот worker **обязан** назначить себя через `assign-task ... --user me` перед/после `move-task`.
+
+### Назначить исполнителя
+
+```
+./workflow/carono-ai/scripts/tracker assign-task <id> --user me
+./workflow/carono-ai/scripts/tracker assign-task <id> --user ai@carono.ru
+./workflow/carono-ai/scripts/tracker assign-task <id> --user none
+```
 
 ### Создать задачу
 
 ```
-POST https://yougile.com/api-v2/tasks
+./workflow/carono-ai/scripts/tracker create-task --title "..." --column "Задачи" --description "..."
+./workflow/carono-ai/scripts/tracker create-task --title "..." --description-file /tmp/desc.md --assignee ai@carono.ru
 ```
 
-Тело запроса (обязателен только `title`):
-
-```json
-{
-  "title": "Название задачи",
-  "columnId": "<id колонки>",
-  "description": "Описание в markdown",
-  "assigned": ["<user_id>", "..."]
-}
-```
-
-Дополнительные поля: `color`, `deadline`, `stickers`, `checklists`, `subtasks`, `completed`, `archived`.
-
-### Обновить задачу / сменить статус
+### Удалить / архивировать задачу
 
 ```
-PUT https://yougile.com/api-v2/tasks/<task_id>
+./workflow/carono-ai/scripts/tracker delete-task <id>
 ```
 
-Тело — только изменяемые поля:
-
-```json
-{
-  "columnId": "<новый id колонки>",
-  "assigned": ["<user_id>"],
-  "title": "Новое название",
-  "deleted": true
-}
-```
-
-- `columnId` — перемещает задачу в другую колонку (смена статуса)
-- `assigned` — полный список назначенных пользователей (заменяет предыдущий)
-- `deleted: true` — удаляет задачу, `deleted: false` — восстанавливает
-- `completed` / `archived` — отметка статуса
-
-**Важно:** при переносе задачи в колонку «Разработка», если на задаче ещё нет ответственного — бот обязан назначить на неё себя (Carono AI).
-
-### Прочитать переписку задачи (комментарии)
+### Список участников проекта
 
 ```
-GET https://yougile.com/api-v2/chats/<task_id>/messages?limit=20&offset=0
-```
-
-Возвращает историю сообщений в чате задачи. `chat_id` = `task_id`.
-
-### Написать сообщение к задаче
-
-```
-POST https://yougile.com/api-v2/chats/<task_id>/messages
-```
-
-Тело запроса:
-
-```json
-{
-  "text": "Текст комментария"
-}
-```
-
-### Удалить задачу
-
-```
-PUT https://yougile.com/api-v2/tasks/<task_id>
-```
-
-Тело: `{"deleted": true}`
-
----
-
-## Вспомогательные эндпоинты
-
-### Получить список колонок
-
-```
-GET https://yougile.com/api-v2/columns?boardId=<board_id>&title=<название>
-```
-
-### Получить список досок
-
-```
-GET https://yougile.com/api-v2/boards?projectId=<project_id>&title=<название>
-```
-
-### Получить список проектов
-
-```
-GET https://yougile.com/api-v2/projects?title=WORKFLOW
-```
-
-### Получить список пользователей
-
-```
-GET https://yougile.com/api-v2/users?limit=20&offset=0
+./workflow/carono-ai/scripts/tracker list-users
 ```
 
 ---
@@ -237,7 +191,7 @@ https://ru.yougile.com/team/3300fcb64048/WORKFLOW#WF-{номер}
 workflow/carono-ai/discussion-state.json
 ```
 
-Значение `updated_at` — числовой ID последнего сообщения чата задачи (поле `id` из ответа API чата).
+Значение `updated_at` в стейте — ID последнего сообщения в чате задачи (поле `id` из последнего элемента ответа `./scripts/tracker list-comments <id>`). Используется для того, чтобы при повторном запуске не реагировать повторно на уже обработанные комментарии.
 
 ### Предварительные проверки
 
