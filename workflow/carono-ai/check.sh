@@ -11,6 +11,28 @@ cd "$SCRIPT_DIR/../.."
 BOT_DIR="workflow/carono-ai"
 TRACKER="$BOT_DIR/scripts/tracker"
 
+# ─── Шапка-помощь ─────────────────────────────────────────────────────────────
+
+SELF="$(basename "$0")"
+
+print_help() {
+  cat <<EOF
+Использование:
+  ./$SELF                — показать текущие статусы задач
+  ./$SELF --run <agent>  — запустить конкретного агента
+  ./$SELF --run all      — запустить всех агентов со статусом NEEDED=yes
+  ./$SELF --help         — показать это сообщение
+
+Доступные агенты: discussion, worker, reviewer
+EOF
+}
+
+# Ранний выход по --help — без обращения к трекеру и без требования настроенного $TRACKER
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  print_help
+  exit 0
+fi
+
 if [[ ! -x "$TRACKER" ]]; then
   echo "ERROR: $TRACKER not found or not executable. Run the carono-wf:tracker-setup skill first." >&2
   exit 2
@@ -88,6 +110,8 @@ NEEDED_reviewer="no";   [[ "$COUNT_reviewer" -gt 0 ]]       && NEEDED_reviewer="
 MODE="${1:-status}"
 
 if [[ "$MODE" == "status" ]]; then
+  print_help
+  echo
   printf "%-12s %-14s %s\n" "AGENT" "TASKS" "NEEDED"
   printf "%-12s %-14s %s\n" "discussion" "$COUNT_discussion_NEW (из $COUNT_discussion_TOTAL)" "$NEEDED_discussion"
   printf "%-12s %-14s %s\n" "worker"     "$COUNT_worker"                                       "$NEEDED_worker"
@@ -138,5 +162,5 @@ if [[ "$MODE" == "--run" ]]; then
   exit 0
 fi
 
-echo "Использование: $0 [--run <discussion|worker|reviewer|all>]" >&2
+print_help >&2
 exit 1
