@@ -6,10 +6,6 @@
     "name": "carono"
   },
   "homepage": "https://github.com/carono/workflow",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/carono/workflow.git"
-  },
   "license": "MIT",
   "keywords": [
     "workflow",
