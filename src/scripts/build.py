@@ -53,7 +53,7 @@ def load_template_variables() -> dict:
         with open(sec_path, encoding="utf-8") as f:
             variables["{{RULES_SECURITY}}"] = f.read()
 
-    for tpl_name in ("WORKFLOW", "PROJECT", "TECH", "BOT"):
+    for tpl_name in ("WORKFLOW", "PROJECT", "TECH", "BOT", "MISSION", "ROADMAP"):
         tpl_path = os.path.join(SRC, "templates", f"{tpl_name}.md")
         if os.path.isfile(tpl_path):
             with open(tpl_path, encoding="utf-8") as f:
