@@ -33,6 +33,49 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
+# ─── Проверка устаревания (staleness check) ───────────────────────────────────
+# Манифест зависимостей: пары "путь<TAB>mtime_at_generation".
+# При запуске скрипт сравнивает mtime каждого файла с записанным; если файл
+# новее или удалён — печатает предупреждение в stderr, но продолжает работу.
+DEPS_MANIFEST=(
+  "workflow/carono-ai/bot.local.md	1777061104"
+  "workflow/carono-ai/WORKFLOW.md	1777061104"
+  "workflow/carono-ai/scripts/tracker	1777061104"
+)
+
+STALE=()
+MISSING=()
+for entry in "${DEPS_MANIFEST[@]}"; do
+  path="${entry%%	*}"
+  recorded="${entry##*	}"
+  if [[ ! -e "$path" ]]; then
+    MISSING+=("$path")
+    continue
+  fi
+  current=$(date -r "$path" +%s 2>/dev/null || python3 -c "import os,sys; print(int(os.path.getmtime(sys.argv[1])))" "$path")
+  if [[ "$current" -gt "$recorded" ]]; then
+    STALE+=("$path")
+  fi
+done
+
+if [[ ${#STALE[@]} -gt 0 || ${#MISSING[@]} -gt 0 ]]; then
+  YELLOW='\033[33m'
+  RESET='\033[0m'
+  {
+    printf "%b" "${YELLOW}WARNING:${RESET} check.sh может быть устаревшим.\n"
+    if [[ ${#STALE[@]} -gt 0 ]]; then
+      printf "%b" "  Изменены после генерации:\n"
+      for f in "${STALE[@]}"; do printf "    - %s\n" "$f"; done
+    fi
+    if [[ ${#MISSING[@]} -gt 0 ]]; then
+      printf "%b" "  Удалены после генерации:\n"
+      for f in "${MISSING[@]}"; do printf "    - %s\n" "$f"; done
+    fi
+    printf "%b" "  Перегенерируй: ${YELLOW}/carono-wf:checker-setup${RESET}\n"
+  } >&2
+fi
+# ─── end staleness check ──────────────────────────────────────────────────────
+
 if [[ ! -x "$TRACKER" ]]; then
   echo "ERROR: $TRACKER not found or not executable. Run the carono-wf:tracker-setup skill first." >&2
   exit 2
