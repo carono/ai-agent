@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Agents visualization — carono-ai</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; color: #222; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: .3em; }
+  section.agent { border: 1px solid #ddd; border-radius: 6px; padding: 1em 1.2em; margin: 1.5em 0; }
+  section.agent h2 { margin-top: 0; }
+  .meta { color: #666; font-size: .9em; margin-bottom: 1em; }
+  ol.steps { padding-left: 1.4em; }
+  ol.steps li { margin: .3em 0; }
+  .kind { display: inline-block; min-width: 70px; padding: 1px 6px; border-radius: 3px; font-size: .8em; font-weight: 600; margin-right: .5em; }
+  .kind-read    { background: #e3f2fd; color: #0d47a1; }
+  .kind-tracker { background: #e8f5e9; color: #1b5e20; }
+  .kind-bash    { background: #fff3e0; color: #e65100; }
+  .kind-intent  { background: #ffebee; color: #b71c1c; }
+  .kind-inline  { background: #f3e5f5; color: #4a148c; }
+  code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-size: .9em; }
+  .note { color: #555; font-size: .9em; }
+  .empty { color: #999; font-style: italic; }
+  footer { color: #999; font-size: .8em; margin-top: 3em; border-top: 1px solid #eee; padding-top: 1em; }
+</style>
+</head>
+<body>
+<h1>Agents visualization — carono-ai</h1>
+
+<!-- BEGIN AGENT: discussion -->
+<section class="agent" id="agent-discussion" data-target="discussion">
+  <h2>discussion <small>(agent)</small></h2>
+  <p class="meta">Прогон: 2026-04-27T16:38:26Z · Шагов: 13 (read: 5, tracker: 4, bash: 2, intent: 2) · Источник трейса: <code>workflow/carono-ai/visualize/trace-discussion.jsonl</code></p>
+
+  <h3>Inlined at build</h3>
+  <ol class="steps">
+    <li><span class="kind kind-inline">inline</span> <code>src/rules/security.md</code> <span class="note">— через переменную RULES_SECURITY</span></li>
+    <li><span class="kind kind-inline">inline</span> <code>src/rules/stop-and-ask.md</code> <span class="note">— через переменную RULES_STOP_AND_ASK</span></li>
+  </ol>
+
+  <h3>Шаги выполнения</h3>
+  <ol class="steps">
+    <li><span class="kind kind-bash">bash</span> <code>ls</code> → <code>workflow/</code> <span class="note">— определяю имя бота - найден carono-ai</span></li>
+    <li><span class="kind kind-read">read</span> <code>workflow/carono-ai/WORKFLOW.md</code> <span class="note">— читаю инструкции по работе с трекером</span></li>
+    <li><span class="kind kind-read">read</span> <code>workflow/carono-ai/PROJECT.md</code> <span class="note">— читаю бизнес-контекст проекта</span></li>
+    <li><span class="kind kind-read">read</span> <code>workflow/carono-ai/bot.local.md</code> <span class="note">— читаю свою роль и логин</span></li>
+    <li><span class="kind kind-read">read</span> <code>workflow/carono-ai/knowledge/INDEX.md</code> <span class="note">— оглавление накопленных проектных знаний</span></li>
+    <li><span class="kind kind-read">read</span> <code>workflow/carono-ai/knowledge/decisions.md</code> <span class="note">— прошлые принятые решения - читаю всегда</span></li>
+    <li><span class="kind kind-bash">bash</span> <code>git status</code> → <code>git status --short</code> <span class="note">— проверяю состояние репозитория</span></li>
+    <li><span class="kind kind-intent">intent</span> <code>git fetch --all --prune &amp;&amp; git pull --ff-only (skipped)</code> → <code>master</code> <span class="note">— синхронизация с remote - мутация состояния, в dry-run пропущено</span></li>
+    <li><span class="kind kind-tracker">tracker</span> <code>tracker whoami</code> → <code>./workflow/carono-ai/scripts/tracker whoami</code> <span class="note">— проверяю токен и свой логин</span></li>
+    <li><span class="kind kind-tracker">tracker</span> <code>tracker list-tasks</code> → <code>list-tasks --column Обсуждение --assignee me</code> <span class="note">— ищу задачи в обсуждении назначенные на меня</span></li>
+    <li><span class="kind kind-tracker">tracker</span> <code>tracker list-tasks</code> → <code>list-tasks --column Обсуждение --assignee none</code> <span class="note">— ищу неназначенные задачи в обсуждении</span></li>
+    <li><span class="kind kind-tracker">tracker</span> <code>tracker list-tasks</code> → <code>list-tasks --column Задачи --assignee me</code> <span class="note">— ищу новые задачи назначенные на меня</span></li>
+    <li><span class="kind kind-intent">intent</span> <code>halt</code> → <code>no-tasks</code> <span class="note">— в колонке Обсуждение нет задач для меня и без исполнителя - завершаю работу</span></li>
+  </ol>
+</section>
+<!-- END AGENT: discussion -->
+
+<footer>Сгенерировано <code>carono-wf:visualize</code></footer>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{"step": 1, "kind": "bash", "action": "ls", "target": "workflow/", "note": "определяю имя бота - найден carono-ai"}
+{"step": 2, "kind": "read", "action": "Read", "target": "workflow/carono-ai/WORKFLOW.md", "note": "читаю инструкции по работе с трекером"}
+{"step": 3, "kind": "read", "action": "Read", "target": "workflow/carono-ai/PROJECT.md", "note": "читаю бизнес-контекст проекта"}
+{"step": 4, "kind": "read", "action": "Read", "target": "workflow/carono-ai/bot.local.md", "note": "читаю свою роль и логин"}
+{"step": 5, "kind": "read", "action": "Read", "target": "workflow/carono-ai/knowledge/INDEX.md", "note": "оглавление накопленных проектных знаний"}
+{"step": 6, "kind": "read", "action": "Read", "target": "workflow/carono-ai/knowledge/decisions.md", "note": "прошлые принятые решения - читаю всегда"}
+{"step": 7, "kind": "bash", "action": "git status", "target": "git status --short", "note": "проверяю состояние репозитория"}
+{"step": 8, "kind": "intent", "action": "git fetch --all --prune && git pull --ff-only (skipped)", "target": "master", "note": "синхронизация с remote - мутация состояния, в dry-run пропущено"}
+{"step": 9, "kind": "tracker", "action": "tracker whoami", "target": "./workflow/carono-ai/scripts/tracker whoami", "note": "проверяю токен и свой логин"}
+{"step": 10, "kind": "tracker", "action": "tracker list-tasks", "target": "list-tasks --column Обсуждение --assignee me", "note": "ищу задачи в обсуждении назначенные на меня"}
+{"step": 11, "kind": "tracker", "action": "tracker list-tasks", "target": "list-tasks --column Обсуждение --assignee none", "note": "ищу неназначенные задачи в обсуждении"}
+{"step": 12, "kind": "tracker", "action": "tracker list-tasks", "target": "list-tasks --column Задачи --assignee me", "note": "ищу новые задачи назначенные на меня"}
+{"step": 13, "kind": "intent", "action": "halt", "target": "no-tasks", "note": "в колонке Обсуждение нет задач для меня и без исполнителя - завершаю работу"}
