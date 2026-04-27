@@ -23,6 +23,8 @@
 
 ## Установка — Claude Code
 
+> Если ставишь впервые — пройдись по [`docs/QUICKSTART.md`](docs/QUICKSTART.md): пять шагов от установки до первой задачи через цикл, без сюрпризов.
+
 ```
 /plugin marketplace add carono/workflow
 /plugin install carono-wf@carono
