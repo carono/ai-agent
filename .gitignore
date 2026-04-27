@@ -7,3 +7,4 @@ src/logs/
 workflow/**/.env
 workflow/**/discussion-state.json
 workflow/**/logs/
+/.claude/scheduled_tasks.lock
